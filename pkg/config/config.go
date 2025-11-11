@@ -10,6 +10,7 @@ import (
 type Config struct {
 	Port      int    `yaml:"Port"`
 	IPAddress string `yaml:"IPAddress"`
+	FilesDir  string `yaml:"FilesDir"`
 }
 
 func ReadConfig() (*Config, error) {
