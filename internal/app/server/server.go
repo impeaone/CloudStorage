@@ -6,7 +6,7 @@ import (
 	"CloudStorageProject-FileServer/pkg/config"
 	"CloudStorageProject-FileServer/pkg/database/postgres"
 	"CloudStorageProject-FileServer/pkg/database/redis"
-	"CloudStorageProject-FileServer/pkg/logger/logger"
+	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
 	"context"
 	"fmt"
 	"net/http"
@@ -17,24 +17,24 @@ import (
 
 type Server struct {
 	Port     int
-	Logger   *logger.Log
+	Logger   *logger2.Log
 	Router   http.Handler
 	Postgres *postgres.Postgres
 	Redis    *redis.Redis
 }
 
 // Logger - middleware
-func Logger(logs *logger.Log, next http.Handler) http.Handler {
+func Logger(logs *logger2.Log, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.String(), "static") {
 			logs.Info(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v",
-				r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 func validate(next http.Handler, pgs *postgres.Postgres, rds *redis.Redis,
-	minio *minioClient.MinioClient, TmplPath string, logger *logger.Log) http.Handler {
+	minio *minioClient.MinioClient, TmplPath string, logger *logger2.Log) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//Валидация api
 		////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,7 +42,8 @@ func validate(next http.Handler, pgs *postgres.Postgres, rds *redis.Redis,
 		if strings.Contains(r.URL.String(), "client") {
 			//ключ проверяется тут
 			if api == "" {
-
+				logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad url api parameter",
+					r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
 				http.Error(w, "api is required", http.StatusBadRequest)
 				return
 			}
@@ -50,6 +51,8 @@ func validate(next http.Handler, pgs *postgres.Postgres, rds *redis.Redis,
 			// TODO: потом тут redis еще
 
 			if exists := pgs.CheckApiExists(api); !exists {
+				logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad api",
+					r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
 				http.SetCookie(w, &http.Cookie{
 					Name:    "apikey",
 					Value:   "",
@@ -67,11 +70,12 @@ func validate(next http.Handler, pgs *postgres.Postgres, rds *redis.Redis,
 		r = r.WithContext(context.WithValue(r.Context(), "redis", rds))
 		r = r.WithContext(context.WithValue(r.Context(), "minio", minio))
 		r = r.WithContext(context.WithValue(r.Context(), "tmplPath", TmplPath))
+		r = r.WithContext(context.WithValue(r.Context(), "logger", logger))
 		next.ServeHTTP(w, r)
 	})
 }
 
-func NewServer(config *config.Config, logs *logger.Log, pgs *postgres.Postgres, rds *redis.Redis,
+func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres, rds *redis.Redis,
 	minio *minioClient.MinioClient) *Server {
 	port := config.Port
 	StaticPath := ""

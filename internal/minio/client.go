@@ -77,7 +77,7 @@ func (mc *MinioClient) FilesList(apiBucket string) ([]models.FileWebResponse, er
 	})
 	for obj := range objs {
 		if obj.Err != nil {
-			return nil, obj.Err
+			return []models.FileWebResponse{}, obj.Err
 		}
 		fileSize := tools.FormatFileSize(obj.Size)
 		fileName := obj.Key

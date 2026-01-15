@@ -13,6 +13,7 @@ import (
 
 /*
 Требуемые переменные окружения:
+
 	MINIO:
 	tools.GetEnv("SERVER_PORT", "11682")
 	tools.GetEnv("MINIO_ENDPOINT", "localhost:9000")
@@ -33,8 +34,9 @@ import (
 	tools.GetEnvAsInt("PG_PORT", 5432)
 	tools.GetEnv("PG_DATABASE", "storage")
 
+	logger:
+	tools.GetEnv("CloudStorage_LOGGER", "INFO")
 */
-
 func main() {
 	// Logger
 	logs := logger.NewLog(tools.GetEnv("CloudStorage_LOGGER", "INFO"))
