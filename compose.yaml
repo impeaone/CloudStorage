@@ -1,0 +1,122 @@
+services:
+  minio:
+    container_name: minio
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports: 
+      - 9001:9001
+      - 9000:9000
+    volumes:
+      - './server_data/minio_data:/data'
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+      MINIO_USE_SSL: True
+      MINIO_DEFAULT_BUCKETS: test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - './server_data/redis_data:/data'
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=storage
+    container_name: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - './server_data/postgres_data:/var/lib/postgresql/data'
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d storage" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    ports:
+      - 8001:5540
+    volumes:
+      - "./server_data/redisinsight:/data"
+    depends_on:
+      - redis
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - 8080:8080
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - './server_data/prometheus_config/prometheus.yml:/etc/prometheus/prometheus.yml'
+      - './server_data/prometheus_data:/prometheus'
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.enable-remote-write-receiver'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    depends_on:
+      - fileserver
+
+  fileserver:
+      build:
+        dockerfile: Dockerfile
+      container_name: fileserver
+      ports:
+        - 11682:11682
+      env_file:
+        - .env
+      depends_on:
+        - minio
+        - postgres
+        - redis
+      restart: unless-stopped
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - "./server_data/grafana_data:/var/lib/grafana"
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  minio_data:
+  redis_data:
+  postgres_data:
+  redisinsight:
+  prometheus_data:
+  fileserver:
+  grafana_data:

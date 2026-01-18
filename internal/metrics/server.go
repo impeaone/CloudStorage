@@ -17,8 +17,8 @@ type metricsServer struct {
 }
 
 func newMetricsServer(logger *logger2.Log, collector *Collector) *metricsServer {
-	port := tools.GetEnvAsInt("MERICS_SERVER_PORT", 11680)
-	ip := tools.GetEnv("MERICS_SERVER_IP", "")
+	port := tools.GetEnvAsInt("METRICS_SERVER_PORT", 11680)
+	ip := tools.GetEnv("METRICS_SERVER_IP", "")
 
 	router := http.NewServeMux()
 	router.Handle("/metrics", promhttp.Handler())

@@ -92,6 +92,7 @@ func main() {
 	}
 	logs.Info("Успешная инициализация конфига", logger.GetPlace())
 
+	// Запуск подсервера с метриками
 	metrics.StartMetricsServer(logs, mtrcs)
 
 	// Инициализация сервера
