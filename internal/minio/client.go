@@ -1,24 +1,29 @@
 package minio_client
 
 import (
+	"CloudStorageProject-FileServer/internal/metrics"
 	MinioConfig "CloudStorageProject-FileServer/internal/minio/config"
 	"CloudStorageProject-FileServer/pkg/models"
 	"CloudStorageProject-FileServer/pkg/tools"
 	"context"
+	"strings"
+	"time"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"strings"
 )
 
 type MinioClient struct {
 	MinioClient *minio.Client
 	MinioConfig *MinioConfig.MinioConfig
+	Metrics     *metrics.MinIOMetrics
 }
 
-func NewMinioClient() *MinioClient {
+func NewMinioClient(metric *metrics.MinIOMetrics) *MinioClient {
 	config := MinioConfig.LoadMinioConfig()
 	return &MinioClient{
 		MinioConfig: config,
+		Metrics:     metric,
 	}
 }
 func (mc *MinioClient) Init() error {
@@ -50,10 +55,24 @@ func (mc *MinioClient) Init() error {
 func (mc *MinioClient) CreateOne(apiBucket string, file models.FileMinio) error {
 	ctx := context.Background()
 
+	start := time.Now()
 	_, err := mc.MinioClient.PutObject(ctx, apiBucket, file.FileName, file.Reader, file.Size, minio.PutObjectOptions{
 		ContentType: file.ContentType,
 	})
-	return err
+	end := time.Since(start)
+	if err != nil {
+		// если ошибка, добавляем метрики ошибок
+		mc.Metrics.UploadErrors.WithLabelValues(apiBucket, err.Error()).Inc()
+		return err
+	}
+	// Если добавление файла успешно, обновляем метрики
+	// +1 к общему количеству загрузок
+	mc.Metrics.UploadsTotal.WithLabelValues(apiBucket).Inc()
+	// Запоминаем время загрузки
+	mc.Metrics.UploadTime.WithLabelValues(apiBucket).Observe(end.Seconds())
+	// Запоминаем размер файла
+	mc.Metrics.UploadSize.WithLabelValues(apiBucket).Observe(float64(file.Size))
+	return nil
 }
 
 // GetOne - берет файл с minio, взовращаем object потому что потом сразу в io.Writer, http.ResponseWriter
@@ -61,9 +80,12 @@ func (mc *MinioClient) GetOne(apiBucket string, objectName string) (*minio.Objec
 	ctx := context.Background()
 	obj, err := mc.MinioClient.GetObject(ctx, apiBucket, objectName, minio.GetObjectOptions{})
 	if err != nil {
+		// Если ошибка выдачи файла
+		mc.Metrics.DownloadErrors.WithLabelValues(apiBucket, err.Error()).Inc()
 		return nil, err
 	}
-
+	// Если успешно, +1 к скачиваниям
+	mc.Metrics.DownloadsTotal.WithLabelValues(apiBucket).Inc()
 	return obj, nil
 }
 
@@ -77,6 +99,7 @@ func (mc *MinioClient) FilesList(apiBucket string) ([]models.FileWebResponse, er
 	})
 	for obj := range objs {
 		if obj.Err != nil {
+			mc.Metrics.FilesListErrors.WithLabelValues(apiBucket, obj.Err.Error()).Inc()
 			return []models.FileWebResponse{}, obj.Err
 		}
 		fileSize := tools.FormatFileSize(obj.Size)
@@ -90,6 +113,7 @@ func (mc *MinioClient) FilesList(apiBucket string) ([]models.FileWebResponse, er
 			LastModTime: obj.LastModified.Format("02.01.2006 12:05"),
 		})
 	}
+	mc.Metrics.FilesListTotal.WithLabelValues(apiBucket).Add(float64(len(files)))
 	return files, nil
 }
 
@@ -98,8 +122,9 @@ func (mc *MinioClient) Delete(apiBucket string, objectName string) error {
 
 	err := mc.MinioClient.RemoveObject(ctx, apiBucket, objectName, minio.RemoveObjectOptions{})
 	if err != nil {
+		mc.Metrics.DeleteErrors.WithLabelValues(apiBucket, err.Error()).Inc()
 		return err
 	}
-
+	mc.Metrics.DeletesTotal.WithLabelValues(apiBucket).Inc()
 	return nil
 }
