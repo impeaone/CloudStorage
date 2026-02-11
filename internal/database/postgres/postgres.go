@@ -13,15 +13,13 @@ import (
 
 type Postgres struct {
 	pool    *pgxpool.Pool
-	ctxDB   context.Context
-	clsDB   context.CancelFunc
 	metrics *metrics.PostgresMetrics
 }
 
 func InitPostgres(metric *metrics.PostgresMetrics) (*Postgres, error) {
 	pgUser := tools.GetEnv("PG_USER", "postgres")
 	pgPassword := tools.GetEnv("PG_PASSWORD", "postgres")
-	pgHost := tools.GetEnv("PG_HOST", "localhost")
+	pgHost := tools.GetEnv("PG_HOST", "192.168.3.92")
 	pgPort := tools.GetEnvAsInt("PG_PORT", 5432)
 	pgDatabase := tools.GetEnv("PG_DATABASE", "storage")
 
@@ -38,12 +36,9 @@ func InitPostgres(metric *metrics.PostgresMetrics) (*Postgres, error) {
 	}
 	createExampleAPI(pool)
 
-	ctxDB, cls := context.WithCancel(context.Background())
 	return &Postgres{
 		pool:    pool,
 		metrics: metric,
-		ctxDB:   ctxDB,
-		clsDB:   cls,
 	}, nil
 
 }
@@ -110,6 +105,18 @@ func (p *Postgres) UpdateLastLogin(api string) error {
 	return nil
 }
 
-func (p *Postgres) Close() {
-	p.clsDB()
+func (p *Postgres) CloseConnection(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		p.pool.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		p.pool.Reset()
+		return ctx.Err()
+
+	}
 }

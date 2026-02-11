@@ -18,7 +18,7 @@ type Redis struct {
 }
 
 func NewRedis(metric *metrics.RedisMetrics) (*Redis, error) {
-	rdsHost := tools.GetEnv("REDIS_HOST", "localhost")
+	rdsHost := tools.GetEnv("REDIS_HOST", "192.168.3.92")
 	rdsPort := tools.GetEnvAsInt("REDIS_PORT", 6379)
 	rdsPassword := tools.GetEnv("REDIS_PASSWORD", "")
 	rdsDB := tools.GetEnvAsInt("REDIS_DB", 0)
@@ -39,8 +39,18 @@ func NewRedis(metric *metrics.RedisMetrics) (*Redis, error) {
 	}, nil
 }
 
-func (rds *Redis) Close() {
-	rds.pool.Close()
+func (rds *Redis) CloseConnection(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		_ = rds.pool.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (rds *Redis) SetAPIField(apiData *models.APIPGS) error {

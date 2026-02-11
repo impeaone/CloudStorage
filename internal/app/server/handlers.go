@@ -15,6 +15,7 @@ import (
 // TODO: поверки бакетов надо сделать в функциях всех
 func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	// пример запроса GET /client/api/v1/get-file?api=apikey&filename=minecraft.png
+
 	logger := r.Context().Value("logger").(*logger2.Log)
 	// Если методо не тот
 	if r.Method != "GET" {

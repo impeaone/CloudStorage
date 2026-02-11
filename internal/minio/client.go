@@ -26,6 +26,21 @@ func NewMinioClient(metric *metrics.MinIOMetrics) *MinioClient {
 		Metrics:     metric,
 	}
 }
+
+func (mc *MinioClient) CloseConnection(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		mc.MinioClient.TraceOff()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (mc *MinioClient) Init() error {
 	ctx := context.Background()
 

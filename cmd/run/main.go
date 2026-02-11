@@ -2,15 +2,21 @@ package main
 
 import (
 	"CloudStorageProject-FileServer/internal/app"
+	"CloudStorageProject-FileServer/internal/database/postgres"
+	"CloudStorageProject-FileServer/internal/database/redis"
 	"CloudStorageProject-FileServer/internal/metrics"
 	minioClient "CloudStorageProject-FileServer/internal/minio"
+	"CloudStorageProject-FileServer/pkg/Constants"
 	"CloudStorageProject-FileServer/pkg/config"
-	"CloudStorageProject-FileServer/pkg/database/postgres"
-	"CloudStorageProject-FileServer/pkg/database/redis"
+
 	"CloudStorageProject-FileServer/pkg/logger/logger"
 	"CloudStorageProject-FileServer/pkg/tools"
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 )
 
 /*
@@ -93,12 +99,55 @@ func main() {
 	logs.Info("Успешная инициализация конфига", logger.GetPlace())
 
 	// Запуск подсервера с метриками
-	metrics.StartMetricsServer(logs, mtrcs)
+	metricServer := metrics.StartMetricsServer(logs, mtrcs)
 
 	// Инициализация сервера
 	application := app.NewApp(conf, logs, pgs, rds, minio, mtrcs.HTTP)
-	if errStart := application.Start(); errStart != nil {
-		logs.Error(fmt.Sprintf("Server Start error: %v", errStart), logger.GetPlace())
+	go func() {
+		if errStart := application.Start(); errStart != nil {
+			logs.Error(fmt.Sprintf("Server Start error: %v", errStart), logger.GetPlace())
+			return
+		}
+	}()
+
+	// Graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	sig := <-quit
+	logs.Info(fmt.Sprintf("Received signal: %v", sig), logger.GetPlace())
+
+	ctx, clos := context.WithTimeout(context.Background(), Constants.ShutdownTime)
+	defer clos()
+	if errShut := application.ShutDown(ctx); errShut != nil {
+		logs.Error("Error graceful shutdown. Heavy stopping...", logger.GetPlace())
+		os.Exit(1)
 		return
 	}
+	// Закрываем соединение с Postgres
+	if errClosePgs := pgs.CloseConnection(ctx); errClosePgs != nil {
+		logs.Warning(fmt.Sprintf("Close postgres connection error: %v", logger.GetPlace()), logger.GetPlace())
+		os.Exit(1)
+		return
+	}
+	// Закрываем соеджинение с Redis
+	if errCloseRedis := rds.CloseConnection(ctx); errCloseRedis != nil {
+		logs.Warning(fmt.Sprintf("Close redis connection error: %v", logger.GetPlace()), logger.GetPlace())
+		os.Exit(1)
+		return
+	}
+	// Закрываем соединение с Minio
+	if errCloseMinio := minio.CloseConnection(ctx); errCloseMinio != nil {
+		logs.Warning(fmt.Sprintf("Close minio connection error: %v", logger.GetPlace()), logger.GetPlace())
+		os.Exit(1)
+		return
+	}
+
+	// Выключаем метрики
+	if errMetr := metricServer.Close(ctx); errMetr != nil {
+		logs.Warning(fmt.Sprintf("Close metric server error: %v", logger.GetPlace()), logger.GetPlace())
+		os.Exit(1)
+		return
+	}
+	logs.Info("Shutdown successful", logger.GetPlace())
 }

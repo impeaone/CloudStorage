@@ -15,7 +15,7 @@ type MinioConfig struct {
 
 func LoadMinioConfig() *MinioConfig {
 	port := tools.GetEnv("SERVER_PORT", "11682")
-	minioEndPoint := tools.GetEnv("MINIO_ENDPOINT", "localhost:9000")
+	minioEndPoint := tools.GetEnv("MINIO_ENDPOINT", "192.168.3.92:9000")
 	minioExampleBucket := tools.GetEnv("MINIO_EXAMPLE_BUCKET", "test")
 	minioRootUser := tools.GetEnv("MINIO_ROOT_USER", "user")
 	minioRootPassword := tools.GetEnv("MINIO_ROOT_PASSWORD", "password")

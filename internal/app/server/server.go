@@ -1,24 +1,28 @@
 package server
 
 import (
+	"CloudStorageProject-FileServer/internal/database/postgres"
+	"CloudStorageProject-FileServer/internal/database/redis"
 	"CloudStorageProject-FileServer/internal/metrics"
 	"CloudStorageProject-FileServer/internal/middleware"
 	minioClient "CloudStorageProject-FileServer/internal/minio"
 	"CloudStorageProject-FileServer/pkg/Constants"
 	"CloudStorageProject-FileServer/pkg/config"
-	"CloudStorageProject-FileServer/pkg/database/postgres"
-	"CloudStorageProject-FileServer/pkg/database/redis"
 	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
+	"context"
 	"net/http"
 	"runtime"
+	"sync"
 )
 
 type Server struct {
-	Port     int
-	Logger   *logger2.Log
-	Router   http.Handler
-	Postgres *postgres.Postgres
-	Redis    *redis.Redis
+	Port        int
+	Logger      *logger2.Log
+	Router      http.Handler
+	Postgres    *postgres.Postgres
+	Redis       *redis.Redis
+	exitChan    chan struct{}
+	connections *sync.WaitGroup
 }
 
 func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres, rds *redis.Redis,
@@ -63,13 +67,41 @@ func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres,
 
 	//health check
 	router.HandleFunc("/health", healthCheck)
-	CheckPanics := middleware.PanicMiddleware(router, logs)
+
+	// Middleware
+	exitChan := make(chan struct{})
+	conns := new(sync.WaitGroup)
+	ShutDown := middleware.ShutdownMiddleware(exitChan, conns, router)
+	CheckPanics := middleware.PanicMiddleware(ShutDown, logs)
 	HttpMetrics := metrics.HTTPMetricsMiddleware(CheckPanics, metric)
 	validations := middleware.ValidateAPI(HttpMetrics, pgs, rds, minio, TemplatePath, logs)
 	handler := middleware.Logger(logs, validations)
 	return &Server{
-		Port:   port,
-		Logger: logs,
-		Router: handler,
+		Port:        port,
+		Logger:      logs,
+		Router:      handler,
+		exitChan:    exitChan,
+		Postgres:    pgs,
+		Redis:       rds,
+		connections: conns,
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	close(s.exitChan)
+
+	finished := make(chan struct{})
+	go func() {
+		s.connections.Wait()
+		close(finished)
+	}()
+
+	select {
+	case <-finished:
+		// Все операции завершилсь
+		return nil
+	case <-ctx.Done():
+		// Время истекло
+		return ctx.Err()
 	}
 }

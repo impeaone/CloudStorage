@@ -1,6 +1,7 @@
 package Constants
 
-// TODO: Константы сделать
+import "time"
+
 const (
 	LoggerPathLinux     = "./Log.txt"
 	LoggerPathWindows   = "../../Log.txt"
@@ -10,4 +11,6 @@ const (
 	StaticPathLinux     = "./pkg/static/"
 	StaticPathWindows   = "../../pkg/static/"
 	StaticPathDarwin    = "../../pkg/static/"
+
+	ShutdownTime = 10 * time.Second
 )

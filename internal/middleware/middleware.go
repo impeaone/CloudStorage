@@ -1,14 +1,16 @@
 package middleware
 
 import (
+	"CloudStorageProject-FileServer/internal/database/postgres"
+	"CloudStorageProject-FileServer/internal/database/redis"
 	minioClient "CloudStorageProject-FileServer/internal/minio"
-	"CloudStorageProject-FileServer/pkg/database/postgres"
-	"CloudStorageProject-FileServer/pkg/database/redis"
 	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -91,5 +93,25 @@ func PanicMiddleware(next http.Handler, logger *logger2.Log) http.Handler {
 		}()
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+// ShutdownMiddleware - middleware проверяющий закрыт ли канал, для graceful shutdown
+func ShutdownMiddleware(exitChan chan struct{}, conns *sync.WaitGroup, next http.Handler) http.Handler {
+	conns.Add(1)
+	defer conns.Done()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-exitChan:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":   "service_unavailable",
+				"message": "Service is shutting down",
+			})
+			return
+		default:
+			next.ServeHTTP(w, r)
+		}
 	})
 }
