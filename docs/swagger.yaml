@@ -1,0 +1,262 @@
+basePath: /client/api/v1
+definitions:
+  models.FileInfo:
+    properties:
+      content_type:
+        example: image/png
+        type: string
+      etag:
+        example: '"33a64df551425fcc55e4d42a148795d9f25f89d4"'
+        type: string
+      last_modified:
+        example: "2024-01-01T12:00:00Z"
+        type: string
+      name:
+        example: alohadance.png
+        type: string
+      size:
+        example: 1024
+        type: integer
+    type: object
+  models.FileResponse:
+    properties:
+      message:
+        type: string
+      new_files:
+        items:
+          $ref: '#/definitions/models.FileWebResponse'
+        type: array
+      status:
+        type: integer
+      uploaded_files:
+        items:
+          type: string
+        type: array
+    type: object
+  models.FileWebResponse:
+    properties:
+      create_date:
+        type: string
+      file_name:
+        type: string
+      file_size:
+        type: string
+      file_type:
+        type: string
+    type: object
+  models.HealthResponse:
+    properties:
+      service:
+        type: string
+      status:
+        type: string
+      time_stamp:
+        type: string
+      version:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: MinIO-base data storage
+  title: CloudStorage
+  version: "1.0"
+paths:
+  /client/api/v1/delete-file:
+    delete:
+      consumes:
+      - application/json
+      description: Delete file by user apikey and filename
+      parameters:
+      - description: APIKEY (UUID)
+        example: 60601fee-2bf1-4721-ae6f-7636e79a0cba
+        in: query
+        name: api
+        required: true
+        type: string
+      - description: File name
+        example: alohadance.png
+        in: query
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.FileResponse'
+        "400":
+          description: Bad request
+          schema:
+            type: string
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Delete a file by api
+      tags:
+      - files
+  /client/api/v1/get-file:
+    get:
+      consumes:
+      - application/json
+      description: Get file by user apikey and filename
+      parameters:
+      - description: APIKEY (UUID)
+        example: 60601fee-2bf1-4721-ae6f-7636e79a0cba
+        in: query
+        name: apikey
+        required: true
+        type: string
+      - description: File name
+        example: alohadance.png
+        in: query
+        name: filename
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.FileInfo'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Get a file by api
+      tags:
+      - files
+  /client/api/v1/get-files-list:
+    get:
+      consumes:
+      - application/json
+      description: Get user files by his apikey
+      parameters:
+      - description: APIKEY (UUID)
+        example: 60601fee-2bf1-4721-ae6f-7636e79a0cba
+        in: query
+        name: api
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.FileWebResponse'
+        "404":
+          description: Not found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Get user file list by api
+      tags:
+      - files
+  /client/api/v1/storage/:
+    get:
+      description: Page with user files
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: Storage page
+          schema:
+            type: file
+        "302":
+          description: Found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Storage page
+      tags:
+      - files
+  /client/api/v1/upload-files:
+    post:
+      consumes:
+      - application/json
+      description: Upload file by user apikey and files from query body
+      parameters:
+      - description: APIKEY (UUID)
+        example: 60601fee-2bf1-4721-ae6f-7636e79a0cba
+        in: query
+        name: api
+        required: true
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.FileResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Internal server error
+          schema:
+            type: string
+      summary: Upload a file
+      tags:
+      - files
+  /health:
+    get:
+      description: Check if API is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.HealthResponse'
+      summary: Health check
+      tags:
+      - system
+  /index:
+    get:
+      description: Page to enter user apikey to get access for his storage
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: Login page
+          schema:
+            type: file
+        "302":
+          description: Found
+          schema:
+            type: string
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+      summary: Page to login
+      tags:
+      - files
+schemes:
+- http
+swagger: "2.0"

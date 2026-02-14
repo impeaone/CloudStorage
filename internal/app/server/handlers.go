@@ -12,12 +12,22 @@ import (
 	"time"
 )
 
-// TODO: поверки бакетов надо сделать в функциях всех
+// getFileFunc - get file by apikey: GET /get-file?apikey=xxx&filename=yyy
+// getFileFunc godoc
+// @Summary Get a file by api
+// @Description Get file by user apikey and filename
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param apikey query string true "APIKEY (UUID)" example(60601fee-2bf1-4721-ae6f-7636e79a0cba)
+// @Param filename query string true "File name" example(alohadance.png)
+// @Success 200 {object} models.FileInfo
+// @Failure 400 {object} string "Bad Request"
+// @Failure 405 {object} string "Method not allowed"
+// @Router /client/api/v1/get-file [get]
 func getFileFunc(w http.ResponseWriter, r *http.Request) {
-	// пример запроса GET /client/api/v1/get-file?api=apikey&filename=minecraft.png
-
 	logger := r.Context().Value("logger").(*logger2.Log)
-	// Если методо не тот
+	// Если метод не тот
 	if r.Method != "GET" {
 		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
 			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
@@ -61,6 +71,19 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// storeFilesFunc - saving file by apikey: GET /upload-files?api=xxx
+// storeFilesFunc godoc
+// @Summary Upload a file
+// @Description Upload file by user apikey and files from query body
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param api query string true "APIKEY (UUID)" example(60601fee-2bf1-4721-ae6f-7636e79a0cba)
+// @Param file formData file true "File to upload"
+// @Success 200 {object} models.FileResponse
+// @Failure 405 {object} string "Method not allowed"
+// @Failure 500 {object} string "Internal server error"
+// @Router /client/api/v1/upload-files [post]
 func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	// Берем логгер из контекста
 	logger := r.Context().Value("logger").(*logger2.Log)
@@ -71,10 +94,8 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	api := r.URL.Query().Get("api")
 	minio := r.Context().Value("minio").(*minioClient.MinioClient)
-
 	// MultipartReader для чтения form-data
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -175,7 +196,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Формируем ответ
-	response := models.CreateFileResponse{
+	response := models.FileResponse{
 		Status:        200,
 		Message:       fmt.Sprintf("Successfully uploaded %d files", len(uploaded)),
 		NewFiles:      fileList,
@@ -191,6 +212,20 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	w.Write(bytes)
 }
 
+// deleteFilesFunc - delete file by apikey: DELETE /delete-file?api=xxx&filename=yyy
+// deleteFilesFunc godoc
+// @Summary Delete a file by api
+// @Description Delete file by user apikey and filename
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param api query string true "APIKEY (UUID)" example(60601fee-2bf1-4721-ae6f-7636e79a0cba)
+// @Param filename query string true "File name" example(alohadance.png)
+// @Success 200 {object} models.FileResponse
+// @Failure 400 {object} string "Bad request"
+// @Failure 405 {object} string "Method not allowed"
+// @Failure 404 {object} string "Not found"
+// @Router /client/api/v1/delete-file [delete]
 func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 	logger := r.Context().Value("logger").(*logger2.Log)
 	if r.Method != "DELETE" {
@@ -224,7 +259,7 @@ func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := models.CreateFileResponse{
+	response := models.FileResponse{
 		Status:   200,
 		Message:  "success",
 		NewFiles: fileList,
@@ -235,6 +270,18 @@ func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// getFilesListFunc - get user file list by apikey: GET /delete-file?api=xxx
+// getFilesListFunc godoc
+// @Summary Get user file list by api
+// @Description Get user files by his apikey
+// @Tags files
+// @Accept json
+// @Produce json
+// @Param api query string true "APIKEY (UUID)" example(60601fee-2bf1-4721-ae6f-7636e79a0cba)
+// @Success 200 {object} models.FileWebResponse
+// @Failure 405 {object} string "Method not allowed"
+// @Failure 404 {object} string "Not found"
+// @Router /client/api/v1/get-files-list [get]
 func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 	// пример запроса: POST /client/api/v1/get-files-list?api=api_key
 	logger := r.Context().Value("logger").(*logger2.Log)
@@ -260,6 +307,16 @@ func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// indexPage - login web page: GET /index
+// indexPage godoc
+// @Summary Page to login
+// @Description Page to enter user apikey to get access for his storage
+// @Tags files
+// @Produce html
+// @Success 200 {file} html "Login page"
+// @Success 302 {object} string "Found"
+// @Failure 405 {object} string "Method not allowed"
+// @Router /index [get]
 func indexPage(w http.ResponseWriter, r *http.Request) {
 	logger := r.Context().Value("logger").(*logger2.Log)
 	if r.Method != "GET" {
@@ -278,6 +335,16 @@ func indexPage(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
+// storagePage - storage web page: GET /storage
+// storagePage godoc
+// @Summary Storage page
+// @Description Page with user files
+// @Tags files
+// @Produce html
+// @Success 200 {file} html "Storage page"
+// @Success 302 {object} string "Found"
+// @Failure 405 {object} string "Method not allowed"
+// @Router /client/api/v1/storage/ [get]
 func storagePage(w http.ResponseWriter, r *http.Request) {
 	logger := r.Context().Value("logger").(*logger2.Log)
 	if r.Method != "GET" {
@@ -300,16 +367,23 @@ func zeroPath(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/index", http.StatusFound)
 }
 
+// healthCheck godoc
+// @Summary Health check
+// @Description Check if API is running
+// @Tags system
+// @Produce json
+// @Success 200 {object} models.HealthResponse
+// @Router /health [get]
 func healthCheck(w http.ResponseWriter, r *http.Request) {
-	health := struct {
-		Status  string `json:"status"`
-		Message string `json:"message"`
-	}{
-		Status:  "OK",
-		Message: "Сервер запущен и нормально функционирует",
+	response := models.HealthResponse{
+		Status:    "ok",
+		Timestamp: time.Now(),
+		Service:   "agrigation-api",
+		Version:   "1.0.0",
 	}
+
 	w.Header().Set("Content-Type", "application/json")
-	bytes, _ := json.Marshal(health)
-	w.Write(bytes)
-	return
+	if errEncode := json.NewEncoder(w).Encode(response); errEncode != nil {
+		return
+	}
 }

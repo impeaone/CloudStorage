@@ -10,6 +10,7 @@ import (
 	"CloudStorageProject-FileServer/pkg/config"
 	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
 	"context"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"runtime"
 	"sync"
@@ -41,7 +42,6 @@ func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres,
 		TemplatePath = Constants.TemplatePathLinux
 	}
 
-	//TODO: Minio делаем
 	router := http.NewServeMux()
 
 	// страницы
@@ -60,13 +60,16 @@ func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres,
 	//TODO: ручку главной страницы
 
 	// файловый api
-	router.HandleFunc("/client/api/v1/get-file", getFileFunc)
-	router.HandleFunc("/client/api/v1/upload-files", storeFilesFunc)
-	router.HandleFunc("/client/api/v1/get-files-list", getFilesListFunc)
-	router.HandleFunc("/client/api/v1/delete-file", deleteFilesFunc)
+	router.HandleFunc("GET /client/api/v1/get-file", getFileFunc)
+	router.HandleFunc("POST /client/api/v1/upload-files", storeFilesFunc)
+	router.HandleFunc("GET /client/api/v1/get-files-list", getFilesListFunc)
+	router.HandleFunc("DELETE /client/api/v1/delete-file", deleteFilesFunc)
 
 	//health check
 	router.HandleFunc("/health", healthCheck)
+
+	// Swagger: /swagger/index.html
+	router.Handle("GET /swagger/", httpSwagger.WrapHandler)
 
 	// Middleware
 	exitChan := make(chan struct{})

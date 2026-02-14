@@ -17,7 +17,7 @@ import (
 // Logger - middleware, логги
 func Logger(logs *logger2.Log, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.String(), "static") {
+		if !strings.Contains(r.URL.String(), "static") && !strings.Contains(r.URL.String(), "swagger") {
 			logs.Info(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v",
 				r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
 		}

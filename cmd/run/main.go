@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "CloudStorageProject-FileServer/docs"
 	"CloudStorageProject-FileServer/internal/app"
 	"CloudStorageProject-FileServer/internal/database/postgres"
 	"CloudStorageProject-FileServer/internal/database/redis"
@@ -8,7 +9,6 @@ import (
 	minioClient "CloudStorageProject-FileServer/internal/minio"
 	"CloudStorageProject-FileServer/pkg/Constants"
 	"CloudStorageProject-FileServer/pkg/config"
-
 	"CloudStorageProject-FileServer/pkg/logger/logger"
 	"CloudStorageProject-FileServer/pkg/tools"
 	"context"
@@ -61,6 +61,12 @@ import (
 	tools.GetEnvAsInt("MERICS_SERVER_PORT", 11680)
 	tools.GetEnv("MERICS_SERVER_IP", "")
 */
+
+// @title CloudStorage
+// @version 1.0
+// @description MinIO-base data storage
+// @BasePath /client/api/v1
+// @schemes http
 func main() {
 	runtime.GOMAXPROCS(tools.GetEnvAsInt("NUM_CPU", runtime.NumCPU()))
 
@@ -130,7 +136,7 @@ func main() {
 		os.Exit(1)
 		return
 	}
-	// Закрываем соеджинение с Redis
+	// Закрываем соединение с Redis
 	if errCloseRedis := rds.CloseConnection(ctx); errCloseRedis != nil {
 		logs.Warning(fmt.Sprintf("Close redis connection error: %v", logger.GetPlace()), logger.GetPlace())
 		os.Exit(1)
