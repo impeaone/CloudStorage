@@ -73,6 +73,16 @@ REDIS_DB=0
 METRICS_SERVER_PORT=11680
 METRICS_SERVER_IP=0.0.0.0
 ```
+## 📚 Документация
+### Swagger UI
+#### После запуска сервера доступна по адресу:
+```text 
+http://localhost:11682/swagger/index.html
+```
+### OpenAPI спецификации
+- JSON: ```http://localhost:11682/swagger/doc.json```
+- YAML: ```http://localhost:11682/swagger/doc.yaml```
+
 ## 🖼️ Демонстрация Web UI
 
 | Главная страница | Хранилище |
