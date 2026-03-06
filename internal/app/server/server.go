@@ -10,10 +10,11 @@ import (
 	"CloudStorageProject-FileServer/pkg/config"
 	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
 	"context"
-	httpSwagger "github.com/swaggo/http-swagger"
 	"net/http"
 	"runtime"
 	"sync"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type Server struct {
@@ -51,7 +52,7 @@ func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres,
 
 	//// site
 	// перенаправление
-	router.HandleFunc("/", zeroPath)
+	//router.HandleFunc("/", zeroPath)
 	// страница входа
 	router.HandleFunc("/index", indexPage)
 	// страница с файлами

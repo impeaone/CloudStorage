@@ -26,7 +26,7 @@ import (
 // @Failure 405 {object} string "Method not allowed"
 // @Router /client/api/v1/get-file [get]
 func getFileFunc(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value("logger").(*logger2.Log)
+	var logger = r.Context().Value("logger").(*logger2.Log)
 	// Если метод не тот
 	if r.Method != "GET" {
 		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
@@ -67,7 +67,7 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size))
-	io.Copy(w, fileMinio)
+	_, _ = io.Copy(w, fileMinio)
 	return
 }
 
@@ -124,7 +124,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 
 		// Проверяем, что это файл (а не поле формы)
 		if part.FileName() == "" {
-			part.Close()
+			_ = part.Close()
 			continue
 		}
 
@@ -133,7 +133,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		if errTemp != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: create temp file error:%v",
 				r.RemoteAddr, r.URL, r.Method, errTemp, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
-			part.Close()
+			_ = part.Close()
 			errors = append(errors, fmt.Sprintf("Error creating temp file for %s: %v", part.FileName(), errTemp))
 			continue
 		}
@@ -141,13 +141,13 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 
 		// Копируем данные из part во временный файл
 		fileSize, errCopy := io.Copy(tempFile, part)
-		part.Close()
-		tempFile.Close()
+		_ = part.Close()
+		_ = tempFile.Close()
 
 		if errCopy != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: copy part to temp error:%v",
 				r.RemoteAddr, r.URL, r.Method, errCopy, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
-			os.Remove(tempFileName)
+			_ = os.Remove(tempFileName)
 			errors = append(errors, fmt.Sprintf("Error saving %s: %v", part.FileName(), errCopy))
 			continue
 		}
@@ -157,7 +157,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		if errOpen != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: open temp error:%v",
 				r.RemoteAddr, r.URL, r.Method, errOpen, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
-			os.Remove(tempFileName)
+			_ = os.Remove(tempFileName)
 			errors = append(errors, fmt.Sprintf("Error reopening %s: %v", part.FileName(), errOpen))
 			continue
 		}
@@ -174,8 +174,8 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		uploadErr := minio.CreateOne(api, filePartition)
 
 		// Закрываем и удаляем временный файл
-		fileForUpload.Close()
-		os.Remove(tempFileName)
+		_ = fileForUpload.Close()
+		_ = os.Remove(tempFileName)
 
 		if uploadErr != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: upload file to minio error:%v",
@@ -209,7 +209,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	bytes, _ := json.Marshal(response)
-	w.Write(bytes)
+	_, _ = w.Write(bytes)
 }
 
 // deleteFilesFunc - delete file by apikey: DELETE /delete-file?api=xxx&filename=yyy
@@ -266,7 +266,7 @@ func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	bytes, _ := json.Marshal(response)
-	w.Write(bytes)
+	_, _ = w.Write(bytes)
 	return
 }
 
@@ -303,7 +303,7 @@ func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	bytes, _ := json.Marshal(files)
-	w.Write(bytes)
+	_, _ = w.Write(bytes)
 	return
 }
 
@@ -364,6 +364,9 @@ func storagePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func zeroPath(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/swagger/index.html" {
+		http.NotFound(w, r)
+	}
 	http.Redirect(w, r, "/index", http.StatusFound)
 }
 
@@ -374,11 +377,11 @@ func zeroPath(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {object} models.HealthResponse
 // @Router /health [get]
-func healthCheck(w http.ResponseWriter, r *http.Request) {
+func healthCheck(w http.ResponseWriter, _ *http.Request) {
 	response := models.HealthResponse{
 		Status:    "ok",
 		Timestamp: time.Now(),
-		Service:   "agrigation-api",
+		Service:   "fileserver",
 		Version:   "1.0.0",
 	}
 
