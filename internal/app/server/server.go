@@ -6,20 +6,21 @@ import (
 	"CloudStorageProject-FileServer/internal/metrics"
 	"CloudStorageProject-FileServer/internal/middleware"
 	minioClient "CloudStorageProject-FileServer/internal/minio"
-	"CloudStorageProject-FileServer/pkg/Constants"
+	consts "CloudStorageProject-FileServer/pkg/Constants"
 	"CloudStorageProject-FileServer/pkg/config"
-	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
+	"fmt"
+
 	"context"
+	"log/slog"
 	"net/http"
-	"runtime"
 	"sync"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type Server struct {
-	Port        int
-	Logger      *logger2.Log
+	Port        string
+	Logger      *slog.Logger
 	Router      http.Handler
 	Postgres    *postgres.Postgres
 	Redis       *redis.Redis
@@ -27,27 +28,12 @@ type Server struct {
 	connections *sync.WaitGroup
 }
 
-func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres, rds *redis.Redis,
+func NewServer(config *config.Config, logs *slog.Logger, pgs *postgres.Postgres, rds *redis.Redis,
 	minio *minioClient.MinioClient, metric *metrics.HTTPMetrics) *Server {
-	port := config.Port
-	StaticPath := ""
-	TemplatePath := ""
-	if runtime.GOOS == "windows" {
-		StaticPath = Constants.StaticPathWindows
-		TemplatePath = Constants.TemplatePathWindows
-	} else if runtime.GOOS == "darwin" {
-		StaticPath = Constants.StaticPathDarwin
-		TemplatePath = Constants.TemplatePathDarwin
-	} else {
-		StaticPath = Constants.StaticPathLinux
-		TemplatePath = Constants.TemplatePathLinux
-	}
-
 	router := http.NewServeMux()
-
 	// страницы
 	// для static элементов (папка static)
-	fs := http.FileServer(http.Dir(StaticPath))
+	fs := http.FileServer(http.Dir(consts.StaticPath))
 	router.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	//// site
@@ -78,10 +64,10 @@ func NewServer(config *config.Config, logs *logger2.Log, pgs *postgres.Postgres,
 	ShutDown := middleware.ShutdownMiddleware(exitChan, conns, router)
 	CheckPanics := middleware.PanicMiddleware(ShutDown, logs)
 	HttpMetrics := metrics.HTTPMetricsMiddleware(CheckPanics, metric)
-	validations := middleware.ValidateAPI(HttpMetrics, pgs, rds, minio, TemplatePath, logs)
+	validations := middleware.ValidateAPI(HttpMetrics, pgs, rds, minio, consts.TemplatePath, logs)
 	handler := middleware.Logger(logs, validations)
 	return &Server{
-		Port:        port,
+		Port:        config.ServerPort,
 		Logger:      logs,
 		Router:      handler,
 		exitChan:    exitChan,
@@ -108,4 +94,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		// Время истекло
 		return ctx.Err()
 	}
+}
+
+func (s *Server) Run() error {
+	return http.ListenAndServe(fmt.Sprintf(":%s", s.Port), s.Router)
 }

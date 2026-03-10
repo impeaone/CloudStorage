@@ -3,6 +3,7 @@ package minio_client
 import (
 	"CloudStorageProject-FileServer/internal/metrics"
 	MinioConfig "CloudStorageProject-FileServer/internal/minio/config"
+	"CloudStorageProject-FileServer/pkg/config"
 	"CloudStorageProject-FileServer/pkg/models"
 	"CloudStorageProject-FileServer/pkg/tools"
 	"context"
@@ -17,13 +18,15 @@ type MinioClient struct {
 	MinioClient *minio.Client
 	MinioConfig *MinioConfig.MinioConfig
 	Metrics     *metrics.MinIOMetrics
+	ctx         context.Context
 }
 
-func NewMinioClient(metric *metrics.MinIOMetrics) *MinioClient {
-	config := MinioConfig.LoadMinioConfig()
+func NewMinioClient(ctx context.Context, metric *metrics.MinIOMetrics) *MinioClient {
+	conf := ctx.Value("config").(*config.Config)
 	return &MinioClient{
-		MinioConfig: config,
+		MinioConfig: MinioConfig.LoadMinioConfig(conf),
 		Metrics:     metric,
+		ctx:         ctx,
 	}
 }
 
@@ -42,7 +45,6 @@ func (mc *MinioClient) CloseConnection(ctx context.Context) error {
 }
 
 func (mc *MinioClient) Init() error {
-	ctx := context.Background()
 
 	client, err := minio.New(mc.MinioConfig.MinioEndPoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(mc.MinioConfig.MinioRootUser, mc.MinioConfig.MinioRootPassword, ""),
@@ -53,13 +55,13 @@ func (mc *MinioClient) Init() error {
 	}
 	mc.MinioClient = client
 
-	exists, errTest := mc.MinioClient.BucketExists(ctx, mc.MinioConfig.MinioExampleBucket)
+	exists, errTest := mc.MinioClient.BucketExists(mc.ctx, mc.MinioConfig.MinioExampleBucket)
 	if errTest != nil {
 		return errTest
 	}
 
 	if !exists {
-		errNewTestBucket := mc.MinioClient.MakeBucket(ctx, mc.MinioConfig.MinioExampleBucket, minio.MakeBucketOptions{})
+		errNewTestBucket := mc.MinioClient.MakeBucket(mc.ctx, mc.MinioConfig.MinioExampleBucket, minio.MakeBucketOptions{})
 		if errNewTestBucket != nil {
 			return errNewTestBucket
 		}
@@ -68,10 +70,9 @@ func (mc *MinioClient) Init() error {
 }
 
 func (mc *MinioClient) CreateOne(apiBucket string, file models.FileMinio) error {
-	ctx := context.Background()
 
 	start := time.Now()
-	_, err := mc.MinioClient.PutObject(ctx, apiBucket, file.FileName, file.Reader, file.Size, minio.PutObjectOptions{
+	_, err := mc.MinioClient.PutObject(mc.ctx, apiBucket, file.FileName, file.Reader, file.Size, minio.PutObjectOptions{
 		ContentType: file.ContentType,
 	})
 	end := time.Since(start)
@@ -92,8 +93,8 @@ func (mc *MinioClient) CreateOne(apiBucket string, file models.FileMinio) error 
 
 // GetOne - берет файл с minio, взовращаем object потому что потом сразу в io.Writer, http.ResponseWriter
 func (mc *MinioClient) GetOne(apiBucket string, objectName string) (*minio.Object, error) {
-	ctx := context.Background()
-	obj, err := mc.MinioClient.GetObject(ctx, apiBucket, objectName, minio.GetObjectOptions{})
+
+	obj, err := mc.MinioClient.GetObject(mc.ctx, apiBucket, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		// Если ошибка выдачи файла
 		mc.Metrics.DownloadErrors.WithLabelValues(apiBucket, err.Error()).Inc()
@@ -105,11 +106,10 @@ func (mc *MinioClient) GetOne(apiBucket string, objectName string) (*minio.Objec
 }
 
 func (mc *MinioClient) FilesList(apiBucket string) ([]models.FileWebResponse, error) {
-	ctx := context.Background()
 
 	var files []models.FileWebResponse
 
-	objs := mc.MinioClient.ListObjects(ctx, apiBucket, minio.ListObjectsOptions{
+	objs := mc.MinioClient.ListObjects(mc.ctx, apiBucket, minio.ListObjectsOptions{
 		Recursive: false,
 	})
 	for obj := range objs {
@@ -133,9 +133,8 @@ func (mc *MinioClient) FilesList(apiBucket string) ([]models.FileWebResponse, er
 }
 
 func (mc *MinioClient) Delete(apiBucket string, objectName string) error {
-	ctx := context.Background()
 
-	err := mc.MinioClient.RemoveObject(ctx, apiBucket, objectName, minio.RemoveObjectOptions{})
+	err := mc.MinioClient.RemoveObject(mc.ctx, apiBucket, objectName, minio.RemoveObjectOptions{})
 	if err != nil {
 		mc.Metrics.DeleteErrors.WithLabelValues(apiBucket, err.Error()).Inc()
 		return err

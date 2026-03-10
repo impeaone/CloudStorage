@@ -6,34 +6,94 @@ import (
 	"CloudStorageProject-FileServer/internal/database/redis"
 	"CloudStorageProject-FileServer/internal/metrics"
 	minioClient "CloudStorageProject-FileServer/internal/minio"
+	"CloudStorageProject-FileServer/pkg/closer"
 	"CloudStorageProject-FileServer/pkg/config"
-	"CloudStorageProject-FileServer/pkg/logger/logger"
 	"context"
 	"fmt"
-	"net/http"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 type App struct {
-	fileServer *server.Server
+	fileServer   *server.Server
+	metricServer *metrics.MetricsServer
+	ctxCloser    *closer.Closer
+	logger       *slog.Logger
+	conf         *config.Config
 }
 
-func NewApp(config *config.Config, logger *logger.Log, pgs *postgres.Postgres, rds *redis.Redis,
-	minio *minioClient.MinioClient, metric *metrics.HTTPMetrics) *App {
-	fileServer := server.NewServer(config, logger, pgs, rds, minio, metric)
-	return &App{
-		fileServer: fileServer,
+func NewApp(ctx context.Context) (*App, error) {
+	logger := ctx.Value("logger").(*slog.Logger)
+	conf := ctx.Value("config").(*config.Config)
+
+	ctxCloser := closer.NewCloser(logger)
+
+	metric := metrics.NewCollector("CloudStorage")
+
+	metricServer := metrics.NewMetricsServer(ctx)
+
+	minio := minioClient.NewMinioClient(ctx, metric.Minio)
+	if err := minio.Init(); err != nil {
+		return nil, fmt.Errorf("minio init error: %w", err)
 	}
+
+	pgs, err := postgres.InitPostgres(ctx, metric.Postgres)
+	if err != nil {
+		return nil, fmt.Errorf("postgres init error: %w", err)
+	}
+
+	rds, err := redis.NewRedis(ctx, metric.Redis)
+	if err != nil {
+		return nil, fmt.Errorf("redis init error: %w", err)
+	}
+
+	fileServer := server.NewServer(conf, logger, pgs, rds, minio, metric.HTTP)
+
+	ctxCloser.Add("minio", minio.CloseConnection)
+	ctxCloser.Add("metrics", metricServer.Close)
+	ctxCloser.Add("postgres", pgs.CloseConnection)
+	ctxCloser.Add("redis", rds.CloseConnection)
+	ctxCloser.Add("server", fileServer.Shutdown)
+	return &App{
+		fileServer:   fileServer,
+		metricServer: metricServer,
+		ctxCloser:    ctxCloser,
+		logger:       logger,
+		conf:         conf,
+	}, nil
 }
 
 func (app *App) Start() error {
-	app.fileServer.Logger.Info(fmt.Sprintf("Server listening on port %d", app.fileServer.Port), logger.GetPlace())
-	err := http.ListenAndServe(fmt.Sprintf(":%d", app.fileServer.Port), app.fileServer.Router)
-	return err
-}
+	if app == nil || app.fileServer == nil || app.metricServer == nil || app.ctxCloser == nil {
+		return fmt.Errorf("application is nil")
+	}
 
-func (app *App) ShutDown(ctx context.Context) error {
-	if err := app.fileServer.Shutdown(ctx); err != nil {
+	errCh := make(chan error, 2)
+
+	go func() {
+		app.logger.Info("starting server", "port", app.fileServer.Port)
+		errCh <- app.fileServer.Run()
+	}()
+
+	go func() {
+		app.logger.Info("starting metrics", "port", app.conf.MetricsServerPort)
+		errCh <- app.metricServer.StartMetricsServer()
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
+
+	select {
+	case err := <-errCh:
 		return err
+	case sig := <-sigChan:
+		app.logger.Info("signal received", "signal", sig.String())
 	}
 	return nil
+}
+
+func (app *App) Shutdown(ctx context.Context) error {
+	return app.ctxCloser.Close(ctx)
 }

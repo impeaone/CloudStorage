@@ -2,11 +2,12 @@ package server
 
 import (
 	minioClient "CloudStorageProject-FileServer/internal/minio"
-	logger2 "CloudStorageProject-FileServer/pkg/logger/logger"
 	"CloudStorageProject-FileServer/pkg/models"
+	"CloudStorageProject-FileServer/pkg/tools"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -26,11 +27,11 @@ import (
 // @Failure 405 {object} string "Method not allowed"
 // @Router /client/api/v1/get-file [get]
 func getFileFunc(w http.ResponseWriter, r *http.Request) {
-	var logger = r.Context().Value("logger").(*logger2.Log)
+	var logger = r.Context().Value("logger").(*slog.Logger)
 	// Если метод не тот
 	if r.Method != "GET" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -39,8 +40,8 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	filename := r.URL.Query().Get("filename")
 	// Если названия файла в параметре строки нет
 	if filename == "" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad filename parameter",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad filename parameter",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "filename is required", http.StatusBadRequest)
 		return
 	}
@@ -51,7 +52,7 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	fileMinio, err := Minio.GetOne(api, filename)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: get minio-file error:%v",
-			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -59,7 +60,7 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 	stat, errStat := fileMinio.Stat()
 	if errStat != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: minio-file error:%v",
-			r.RemoteAddr, r.URL, r.Method, errStat, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, errStat, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, errStat.Error(), http.StatusBadRequest)
 		return
 	}
@@ -86,11 +87,11 @@ func getFileFunc(w http.ResponseWriter, r *http.Request) {
 // @Router /client/api/v1/upload-files [post]
 func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	// Берем логгер из контекста
-	logger := r.Context().Value("logger").(*logger2.Log)
+	logger := r.Context().Value("logger").(*slog.Logger)
 	// Если метод не тот
 	if r.Method != "POST" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -100,7 +101,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	reader, err := r.MultipartReader()
 	if err != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: multipartReader error:%v",
-			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Openfile error", http.StatusInternalServerError)
 		return
 	}
@@ -117,7 +118,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		}
 		if errNext != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: nextPart error:%v",
-				r.RemoteAddr, r.URL, r.Method, errNext, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, errNext, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 			errors = append(errors, fmt.Sprintf("Error reading part: %v", errNext))
 			continue
 		}
@@ -132,7 +133,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		tempFile, errTemp := os.CreateTemp("", "upload-*")
 		if errTemp != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: create temp file error:%v",
-				r.RemoteAddr, r.URL, r.Method, errTemp, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, errTemp, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 			_ = part.Close()
 			errors = append(errors, fmt.Sprintf("Error creating temp file for %s: %v", part.FileName(), errTemp))
 			continue
@@ -146,7 +147,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 
 		if errCopy != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: copy part to temp error:%v",
-				r.RemoteAddr, r.URL, r.Method, errCopy, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, errCopy, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 			_ = os.Remove(tempFileName)
 			errors = append(errors, fmt.Sprintf("Error saving %s: %v", part.FileName(), errCopy))
 			continue
@@ -156,7 +157,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 		fileForUpload, errOpen := os.Open(tempFileName)
 		if errOpen != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: open temp error:%v",
-				r.RemoteAddr, r.URL, r.Method, errOpen, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, errOpen, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 			_ = os.Remove(tempFileName)
 			errors = append(errors, fmt.Sprintf("Error reopening %s: %v", part.FileName(), errOpen))
 			continue
@@ -179,7 +180,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 
 		if uploadErr != nil {
 			logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: upload file to minio error:%v",
-				r.RemoteAddr, r.URL, r.Method, uploadErr, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+				r.RemoteAddr, r.URL, r.Method, uploadErr, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 			errors = append(errors, fmt.Sprintf("Error uploading %s: %v", part.FileName(), uploadErr))
 			continue
 		}
@@ -191,7 +192,7 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 	fileList, errList := minio.FilesList(api)
 	if errList != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: open temp error:%v",
-			r.RemoteAddr, r.URL, r.Method, errList, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, errList, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		fileList = []models.FileWebResponse{}
 	}
 
@@ -227,18 +228,18 @@ func storeFilesFunc(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} string "Not found"
 // @Router /client/api/v1/delete-file [delete]
 func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value("logger").(*logger2.Log)
+	logger := r.Context().Value("logger").(*slog.Logger)
 	if r.Method != "DELETE" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	api := r.URL.Query().Get("api")
 	filename := r.URL.Query().Get("filename")
 	if filename == "" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad filename parameter",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: bad filename parameter",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "filename is required", http.StatusBadRequest)
 		return
 	}
@@ -247,14 +248,14 @@ func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 	errDelete := minio.Delete(api, filename)
 	if errDelete != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: delete minio file error: %v",
-			r.RemoteAddr, r.URL, r.Method, errDelete, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, errDelete, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Error", http.StatusNotFound)
 		return
 	}
 	fileList, errList := minio.FilesList(api)
 	if errList != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: get minio files error: %v",
-			r.RemoteAddr, r.URL, r.Method, errList, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, errList, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Error", http.StatusNotFound)
 		return
 	}
@@ -284,10 +285,10 @@ func deleteFilesFunc(w http.ResponseWriter, r *http.Request) {
 // @Router /client/api/v1/get-files-list [get]
 func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 	// пример запроса: POST /client/api/v1/get-files-list?api=api_key
-	logger := r.Context().Value("logger").(*logger2.Log)
+	logger := r.Context().Value("logger").(*slog.Logger)
 	if r.Method != "GET" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -297,7 +298,7 @@ func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 	files, err := minio.FilesList(api)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: get minio files error: %v",
-			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+			r.RemoteAddr, r.URL, r.Method, err, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Error", http.StatusNotFound)
 		return
 	}
@@ -318,10 +319,10 @@ func getFilesListFunc(w http.ResponseWriter, r *http.Request) {
 // @Failure 405 {object} string "Method not allowed"
 // @Router /index [get]
 func indexPage(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value("logger").(*logger2.Log)
+	logger := r.Context().Value("logger").(*slog.Logger)
 	if r.Method != "GET" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -346,10 +347,10 @@ func indexPage(w http.ResponseWriter, r *http.Request) {
 // @Failure 405 {object} string "Method not allowed"
 // @Router /client/api/v1/storage/ [get]
 func storagePage(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value("logger").(*logger2.Log)
+	logger := r.Context().Value("logger").(*slog.Logger)
 	if r.Method != "GET" {
-		logger.Warning(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
-			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), logger2.GetPlace())
+		logger.Warn(fmt.Sprintf("Client: %s; EndPoint: %s; Method: %s; Time: %v; Message: user uses not allowed method",
+			r.RemoteAddr, r.URL, r.Method, time.Now().Format("02.01.2006 15:04:05")), tools.GetPlace())
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -361,13 +362,6 @@ func storagePage(w http.ResponseWriter, r *http.Request) {
 	}
 	http.ServeFile(w, r, TemplatePath+"/storage.html")
 	return
-}
-
-func zeroPath(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/swagger/index.html" {
-		http.NotFound(w, r)
-	}
-	http.Redirect(w, r, "/index", http.StatusFound)
 }
 
 // healthCheck godoc

@@ -2,8 +2,8 @@ package redis
 
 import (
 	"CloudStorageProject-FileServer/internal/metrics"
+	"CloudStorageProject-FileServer/pkg/config"
 	"CloudStorageProject-FileServer/pkg/models"
-	"CloudStorageProject-FileServer/pkg/tools"
 	"context"
 	"fmt"
 	"strconv"
@@ -15,19 +15,17 @@ import (
 type Redis struct {
 	pool    *redis.Client
 	metrics *metrics.RedisMetrics
+	ctx     context.Context
 }
 
-func NewRedis(metric *metrics.RedisMetrics) (*Redis, error) {
-	rdsHost := tools.GetEnv("REDIS_HOST", "192.168.3.92")
-	rdsPort := tools.GetEnvAsInt("REDIS_PORT", 6379)
-	rdsPassword := tools.GetEnv("REDIS_PASSWORD", "")
-	rdsDB := tools.GetEnvAsInt("REDIS_DB", 0)
+func NewRedis(ctx context.Context, metric *metrics.RedisMetrics) (*Redis, error) {
+	conf := ctx.Value("config").(*config.Config)
+
 	client := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", rdsHost, rdsPort),
-		Password: rdsPassword,
-		DB:       rdsDB,
+		Addr:     conf.RedisAddr(),
+		Password: conf.RedisPassword,
+		DB:       conf.RedisDB,
 	})
-	ctx := context.Background()
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
 		metric.ErrorsTotal.WithLabelValues("redis_ping").Inc()
@@ -36,6 +34,7 @@ func NewRedis(metric *metrics.RedisMetrics) (*Redis, error) {
 	return &Redis{
 		pool:    client,
 		metrics: metric,
+		ctx:     ctx,
 	}, nil
 }
 

@@ -2,8 +2,8 @@ package postgres
 
 import (
 	"CloudStorageProject-FileServer/internal/metrics"
+	"CloudStorageProject-FileServer/pkg/config"
 	"CloudStorageProject-FileServer/pkg/models"
-	"CloudStorageProject-FileServer/pkg/tools"
 	"context"
 	"fmt"
 	"time"
@@ -16,25 +16,20 @@ type Postgres struct {
 	metrics *metrics.PostgresMetrics
 }
 
-func InitPostgres(metric *metrics.PostgresMetrics) (*Postgres, error) {
-	pgUser := tools.GetEnv("PG_USER", "postgres")
-	pgPassword := tools.GetEnv("PG_PASSWORD", "postgres")
-	pgHost := tools.GetEnv("PG_HOST", "192.168.3.92")
-	pgPort := tools.GetEnvAsInt("PG_PORT", 5432)
-	pgDatabase := tools.GetEnv("PG_DATABASE", "storage")
+func InitPostgres(ctx context.Context, metric *metrics.PostgresMetrics) (*Postgres, error) {
+	conf := ctx.Value("config").(*config.Config)
 
-	connStr := fmt.Sprintf("postgresql://%s:%s@%s:%d/%s", pgUser, pgPassword, pgHost, pgPort, pgDatabase)
+	connStr := conf.PostgreSQLDSN()
 
-	ctx := context.Background()
 	pool, errPGX := pgxpool.New(ctx, connStr)
 	if errPGX != nil {
 		return nil, errPGX
 	}
-	err := createTables(pool, metric)
+	err := createTables(ctx, pool, metric)
 	if err != nil {
 		return nil, err
 	}
-	createExampleAPI(pool)
+	createExampleAPI(ctx, pool)
 
 	return &Postgres{
 		pool:    pool,
@@ -42,8 +37,7 @@ func InitPostgres(metric *metrics.PostgresMetrics) (*Postgres, error) {
 	}, nil
 
 }
-func createTables(pool *pgxpool.Pool, m *metrics.PostgresMetrics) error {
-	ctx := context.Background()
+func createTables(ctx context.Context, pool *pgxpool.Pool, m *metrics.PostgresMetrics) error {
 	start := time.Now()
 	_, err := pool.Query(ctx, `
 		CREATE TABLE IF NOT EXISTS minio_keys (
@@ -65,13 +59,15 @@ func createTables(pool *pgxpool.Pool, m *metrics.PostgresMetrics) error {
 	m.QueryTotal.WithLabelValues("create_tables", "success").Inc()
 	return nil
 }
-func createExampleAPI(pool *pgxpool.Pool) {
-	ctx := context.Background()
-	if need := tools.GetEnvAsBool("TEST_API_NEEDED", true); !need {
+
+func createExampleAPI(ctx context.Context, pool *pgxpool.Pool) {
+	conf := ctx.Value("config").(*config.Config)
+
+	if need := conf.TestAPINeeded; !need {
 		return
 	}
-	userTest := tools.GetEnv("TEST_API_KEY", "test")
-	emailTest := tools.GetEnv("TEST_API_EMAIL", "test@test.test")
+	userTest := conf.TestAPIKey
+	emailTest := conf.TestAPIEmail
 
 	query := fmt.Sprintf("INSERT INTO minio_keys (key_name, email) VALUES ('%s', '%s') on conflict do nothing", userTest, emailTest)
 	_ = pool.QueryRow(ctx, query)
@@ -82,7 +78,7 @@ func (p *Postgres) CheckApiExists(api string) *models.APIPGS {
 	ctx := context.Background()
 	apiStruct := &models.APIPGS{}
 	query := fmt.Sprintf("SELECT * FROM minio_keys WHERE key_name = '%s'", api)
-	if p.pool.QueryRow(ctx, query).Scan(&apiStruct.Id, &apiStruct.KeyName, &apiStruct.CloudAccess, &apiStruct.Email,
+	if _ = p.pool.QueryRow(ctx, query).Scan(&apiStruct.Id, &apiStruct.KeyName, &apiStruct.CloudAccess, &apiStruct.Email,
 		&apiStruct.CreatedAt, &apiStruct.LastLogin); apiStruct.KeyName == "" {
 		return nil
 	}
